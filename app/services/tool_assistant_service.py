@@ -3,6 +3,7 @@ import json
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.models.assistant import ToolExecution
 from app.tools.tool_definitions import POLICY_TOOL_DEFINITION
 from app.tools.tool_executor import execute_tool
@@ -25,6 +26,10 @@ class ToolAssistantService:
             self,
             message: str
     )-> tuple[str, list[ToolExecution]]:
+        logger.info(
+            "Tool assistant answer request received",
+            extra={"message_length": len(message), "tool_count": len(self.tools)},
+        )
         input_items: list[object]=[
             {
                 "role": "user",
@@ -42,6 +47,11 @@ class ToolAssistantService:
             input=input_items
         )
 
+        logger.info(
+            "Tool assistant initial LLM response received",
+            extra={"output_length": len(response.output_text or "")},
+        )
+
         input_items.extend(response.output)
 
         function_calls=[
@@ -51,6 +61,7 @@ class ToolAssistantService:
         ]
 
         if not function_calls:
+            logger.info("Tool assistant completed without function calls")
             return response.output_text, tool_executions
 
         for function_call in function_calls:
@@ -61,6 +72,11 @@ class ToolAssistantService:
             tool_result=execute_tool(
                 tool_name=function_call.name,
                 arguments=arguments)
+
+            logger.info(
+                "Tool execution completed",
+                extra={"tool_name": function_call.name, "result": tool_result},
+            )
 
             tool_executions.append(
                 ToolExecution(
@@ -83,6 +99,11 @@ class ToolAssistantService:
             instructions=self.instructions,
             tools=self.tools,
             input=input_items
+        )
+
+        logger.info(
+            "Tool assistant final response created",
+            extra={"output_length": len(final_response.output_text or "")},
         )
 
         return(

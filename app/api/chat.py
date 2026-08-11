@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.models.chat import ChatRequest, ChatResponse
 from app.services.llm_service import llm_service
 
@@ -28,6 +29,13 @@ def create_sse_message(
 
 @router.post("", response_model=ChatResponse)
 async def chat(request: ChatRequest)->ChatResponse:
+    logger.info(
+        "Chat request received",
+        extra={
+            "conversation_id": request.conversation_id,
+            "message_length": len(request.message),
+        },
+    )
     try:
         conversation_id=request.conversation_id
 
@@ -43,6 +51,14 @@ async def chat(request: ChatRequest)->ChatResponse:
 
         conversation_store[conversation_id]= response_id
 
+        logger.info(
+            "Chat request completed",
+            extra={
+                "conversation_id": conversation_id,
+                "response_id": response_id,
+            },
+        )
+
         return ChatResponse(
             reply=reply,
             model=settings.openai_model,
@@ -50,7 +66,7 @@ async def chat(request: ChatRequest)->ChatResponse:
         )
 
     except Exception as exc:
-        print(f"Chat request failed: {exc}")
+        logger.exception("Chat request failed", exc_info=exc)
 
         raise HTTPException(
             status_code=502,
@@ -69,6 +85,10 @@ async def stream_chat(request: ChatRequest)-> StreamingResponse:
     previous_response_id= conversation_store.get(conversation_id)
 
     async def event_generator()-> AsyncGenerator[str, None]:
+        logger.info(
+            "Streaming chat request started",
+            extra={"conversation_id": conversation_id},
+        )
         yield create_sse_message("conversation", {"conversation_id": conversation_id, "model": settings.openai_model})
 
         try:
@@ -81,13 +101,21 @@ async def stream_chat(request: ChatRequest)-> StreamingResponse:
 
                 elif event_type == "completed":
                     conversation_store[conversation_id]= value
+                    logger.info(
+                        "Streaming chat request completed",
+                        extra={"conversation_id": conversation_id, "response_id": value},
+                    )
                     yield create_sse_message("completed", {"conversation_id": conversation_id, "response_id": value})
 
                 elif event_type == "error":
+                    logger.error(
+                        "Streaming chat error event",
+                        extra={"conversation_id": conversation_id, "error": value},
+                    )
                     yield create_sse_message("error", {"message": value})
 
         except Exception as exc:
-            print(f"Streaming chat request failed: {exc}")
+            logger.exception("Streaming chat request failed", exc_info=exc)
             yield create_sse_message(
                 "error",
                 {"message": "The AI service is currently unavailable. Please try again later."}

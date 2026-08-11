@@ -3,6 +3,7 @@ from pprint import pprint
 import json
 
 from app.core.config import settings
+from app.core.logger import logger
 from app.models.analysis import TextAnalysis
 
 class AnalysisService:
@@ -20,6 +21,10 @@ class AnalysisService:
             self, 
             text: str
         ) -> TextAnalysis:
+        logger.info(
+            "Analysis service called",
+            extra={"text_length": len(text), "model": self.model_name},
+        )
 
         schema = TextAnalysis.model_json_schema()
         schema["additionalProperties"] = False
@@ -38,7 +43,9 @@ class AnalysisService:
             },
             max_output_tokens=self.max_output_tokens,
         )        
-        
-        return TextAnalysis.model_validate_json(response.output_text)
+
+        analysis = TextAnalysis.model_validate_json(response.output_text)
+        logger.info("Analysis service completed")
+        return analysis
 
 analysis_service = AnalysisService()
