@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.chat import router as chat_router
 from app.api.analysis import router as analysis_router
@@ -7,10 +9,15 @@ from app.core.logger import logger
 
 app = FastAPI(
     title="AI Chat Project",
-    description="A beginner-friendly AI chat backend with conversation history",
-    version="1.0.0",
+    description="An application with chat, streaming, structured outputs and tool calling.",
+    version="2.0.0",
 )
 
+app.mount(
+    "/static",
+    StaticFiles(directory="app/static"),
+    name="static",
+)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -27,6 +34,11 @@ async def log_requests(request: Request, call_next):
         )
         raise
 
+@app.get("/")
+async def home():
+    return FileResponse(
+        "app/static/index.html"
+    )
 
 @app.get("/health")
 async def health_check()-> dict[str,str]:
